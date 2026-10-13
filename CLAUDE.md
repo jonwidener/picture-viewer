@@ -25,5 +25,9 @@ Local-network web app to browse photos/videos on the server's disk, with names, 
 - Scan is manual (Settings page), runs in a background thread; status via `/api/scan/status`.
 - Port 5000 is commonly taken on this machine by other projects, hence 5057.
 
-## Not done yet (phase 2)
-Duplicate detection, slideshow, map view (EXIF GPS not yet extracted).
+- **Duplicates**: exact copies only. Scan end fully hashes (`files.full_hash`, sha1) only files sharing a quick fingerprint+size; `/api/duplicates` groups by full hash. The Duplicates page is the one place on-disk paths are shown (needed to clean up manually). The app never deletes; users bulk-tag extras instead.
+- **Slideshows**: player (`Slideshow.tsx`) takes a `Source {total,get,ensure}` — the library's `useItems` handle for filtered playback, or an array adapter for saved slideshows. Saved slideshows are ordered item lists (`slideshows`, `slideshow_items`), reordered by drag-and-drop. Player prefs (interval, shuffle) in localStorage.
+- Schema changes after first release are done via guarded `ALTER`s in `db.init_db`.
+
+## Not done / deferred
+Map view (EXIF GPS not extracted), near-duplicate detection.
