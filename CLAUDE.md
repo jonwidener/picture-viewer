@@ -11,6 +11,7 @@ Local-network web app to browse photos/videos on the server's disk, with names, 
 - Backend: `cd backend && .venv/bin/python run.py` (0.0.0.0:5057; `PV_PORT` to change). Needs `ffmpeg`/`ffprobe` on PATH.
 - Frontend: `cd frontend && npm run dev` (proxies `/api` to the backend; host exposed on LAN).
 - Backend setup: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`
+- Single-process: `cd frontend && npm run build`, then `cd backend && .venv/bin/python run.py --prod` (waitress serves API + `frontend/dist`).
 - Check: `cd frontend && npx tsc -b && npx oxlint`
 
 ## Design decisions
