@@ -2,7 +2,7 @@
 
 Self-hosted web app for browsing the photos and videos on a server's disk from any computer on your LAN. Your files are only ever read; the app writes just to its own SQLite DB and cache.
 
-**Features:** grid + viewer, optional names, multiple flat tags, bulk tagging, favorites, search/filter/sort, iPhone support (HEIC, Live Photos, HEVC video), exact-duplicate finder, slideshows (filtered set or saved/custom).
+**Features:** grid + viewer, non-destructive rotation, optional names, multiple flat tags, bulk tagging, favorites, search/filter/sort, iPhone support (HEIC, Live Photos, HEVC video), exact-duplicate finder, slideshows (filtered set or saved/custom).
 
 ## Requirements
 
@@ -59,6 +59,7 @@ The first view of a photo or video generates a thumbnail/converted copy, so it's
 | ← / → | previous / next | previous / next |
 | Space | play Live Photo | pause / resume |
 | `f` | toggle favorite | fullscreen |
+| `r` / shift+`r` | rotate right / left | – |
 | Esc | close | close |
 
 ## Configuration

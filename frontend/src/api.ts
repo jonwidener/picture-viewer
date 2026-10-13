@@ -2,10 +2,10 @@ export interface Tag { id: number; name: string }
 export interface TagCount extends Tag { count: number }
 export interface FileInfo {
   id: number; kind: 'image' | 'video'; role: 'still' | 'motion' | null
-  width: number | null; height: number | null; duration: number | null; v: number; missing: boolean
+  width: number | null; height: number | null; duration: number | null; v: string; missing: boolean
 }
 export interface Item {
-  id: number; name: string | null; favorite: boolean; taken_at: number
+  id: number; name: string | null; favorite: boolean; taken_at: number; rotation: number
   type: 'image' | 'video' | 'live'; files: FileInfo[]; tags: Tag[]; cover_file_id: number | null
 }
 export interface Root { id: number; path: string; enabled: boolean; exists: boolean; files: number }
@@ -14,7 +14,7 @@ export interface ScanStatus {
   added: number; relinked: number; updated: number; missing: number; paired: number; error: string | null
 }
 export interface DupEntry {
-  file_id: number; item_id: number; kind: 'image' | 'video'; size: number; v: number
+  file_id: number; item_id: number; kind: 'image' | 'video'; size: number; v: string
   width: number | null; height: number | null; duration: number | null
   path: string; name: string | null; favorite: boolean; taken_at: number; tags: string[]
 }
@@ -67,9 +67,9 @@ export const api = {
   items: (query: string, offset: number, limit: number) =>
     req<{ total: number; items: Item[] }>(`/items?${query}&offset=${offset}&limit=${limit}`),
   itemIds: (query: string) => req<number[]>(`/items/ids?${query}`),
-  patchItem: (id: number, body: Partial<{ name: string; favorite: boolean; tags: string[] }>) =>
+  patchItem: (id: number, body: Partial<{ name: string; favorite: boolean; tags: string[]; rotate: 90 | -90 }>) =>
     req<Item>(`/items/${id}`, json('PATCH', body)),
-  bulk: (body: { ids: number[]; add_tags?: string[]; remove_tags?: string[]; favorite?: boolean }) =>
+  bulk: (body: { ids: number[]; add_tags?: string[]; remove_tags?: string[]; favorite?: boolean; rotate?: 90 | -90 }) =>
     req<void>('/items/bulk', json('POST', body)),
   tags: () => req<TagCount[]>('/tags'),
   renameTag: (id: number, name: string) => req<void>(`/tags/${id}`, json('PATCH', { name })),

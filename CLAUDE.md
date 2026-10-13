@@ -28,6 +28,7 @@ Local-network web app to browse photos/videos on the server's disk, with names, 
 
 - **Duplicates**: exact copies only. Scan end fully hashes (`files.full_hash`, sha1) only files sharing a quick fingerprint+size; `/api/duplicates` groups by full hash. The Duplicates page is the one place on-disk paths are shown (needed to clean up manually). The app never deletes; users bulk-tag extras instead.
 - **Slideshows**: player (`Slideshow.tsx`) takes a `Source {total,get,ensure}` — the library's `useItems` handle for filtered playback, or an array adapter for saved slideshows. Saved slideshows are ordered item lists (`slideshows`, `slideshow_items`), reordered by drag-and-drop. Player prefs (interval, shuffle) in localStorage.
+- **Rotation**: `items.rotation` (0/90/180/270 clockwise) is a display setting; originals are never touched. Applied server-side to thumbnails, JPEG display copies (any rotated image) and transcoded video (any rotated video, via ffmpeg `transpose`); cache filenames include the rotation. Media URL `v` token = `<mtime-secs>r<rotation>` busts browser caches. Rotation is per item (Live Photo still + clip rotate together).
 - Schema changes after first release are done via guarded `ALTER`s in `db.init_db`.
 
 ## Not done / deferred

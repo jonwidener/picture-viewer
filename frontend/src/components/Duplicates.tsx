@@ -43,7 +43,7 @@ export default function Duplicates({ tags, onTagsChanged }: { tags: TagCount[]; 
       {selected.size > 0 ? (
         <BulkBar count={selected.size} ids={[...selected]} tags={tags}
           onAdd={(t) => bulk({ add_tags: [t] })} onRemove={(t) => bulk({ remove_tags: [t] })}
-          onFavorite={(on) => bulk({ favorite: on })} onClear={() => setSelected(new Set())} />
+          onFavorite={(on) => bulk({ favorite: on })} onRotate={(d) => bulk({ rotate: d })} onClear={() => setSelected(new Set())} />
       ) : (
         <div className="flex items-center gap-3 border-b border-neutral-800 px-3 py-2">
           <span className="text-sm text-neutral-400">

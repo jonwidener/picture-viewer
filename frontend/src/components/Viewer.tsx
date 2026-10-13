@@ -32,6 +32,7 @@ export default function Viewer({ items, index, tags, onIndex, onClose, onChanged
       else if (e.key === 'ArrowLeft') go(-1)
       else if (e.key === 'ArrowRight') go(1)
       else if (e.key === 'f' && item) save({ favorite: !item.favorite })
+      else if (e.key.toLowerCase() === 'r' && item) save({ rotate: e.shiftKey ? -90 : 90 })
       else if (e.key === ' ' && item?.type === 'live') { e.preventDefault(); setMotion((m) => !m) }
     }
     window.addEventListener('keydown', onKey)
@@ -52,7 +53,7 @@ export default function Viewer({ items, index, tags, onIndex, onClose, onChanged
     <div className="fixed inset-0 z-30 flex bg-black/95">
       <div className="relative flex min-w-0 flex-1 items-center justify-center p-4">
         {!item && <p className="text-neutral-500">Loading…</p>}
-        {item && (item.type === 'video' || (item.type === 'live' && motion)) && video && <VideoPlayer file={video} />}
+        {item && (item.type === 'video' || (item.type === 'live' && motion)) && video && <VideoPlayer key={video.v} file={video} />}
         {item && still && !(item.type === 'live' && motion) && (
           <img key={still.id} src={originalUrl(still)} alt="" className="max-h-full max-w-full object-contain" />
         )}
@@ -76,8 +77,14 @@ export default function Viewer({ items, index, tags, onIndex, onClose, onChanged
               onChange={(e) => setDraft(e.target.value)}
               onBlur={() => { if (draft !== null && draft !== (item.name ?? '')) save({ name: draft }); setDraft(null) }}
               onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-            <button className={`text-2xl ${item.favorite ? 'text-red-500' : 'text-neutral-500 hover:text-neutral-300'}`}
-              onClick={() => save({ favorite: !item.favorite })}>{item.favorite ? '♥' : '♡'}</button>
+            <div className="flex items-center gap-3">
+              <button className={`text-2xl ${item.favorite ? 'text-red-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+                onClick={() => save({ favorite: !item.favorite })}>{item.favorite ? '♥' : '♡'}</button>
+              <button className="rounded bg-neutral-800 px-2 py-1 text-lg hover:bg-neutral-700" title="Rotate left (shift+R)"
+                onClick={() => save({ rotate: -90 })}>⟲</button>
+              <button className="rounded bg-neutral-800 px-2 py-1 text-lg hover:bg-neutral-700" title="Rotate right (R)"
+                onClick={() => save({ rotate: 90 })}>⟳</button>
+            </div>
             <p className="text-sm text-neutral-400">{fmtDate(item.taken_at)}</p>
             <p className="text-sm text-neutral-500">
               {item.type === 'live' ? 'Live Photo' : item.type === 'video' ? 'Video' : 'Photo'}

@@ -85,7 +85,7 @@ export default function App() {
           {selected.size > 0 ? (
             <BulkBar count={selected.size} ids={[...selected]} tags={tags}
               onAdd={(t) => bulk({ add_tags: [t] })} onRemove={(t) => bulk({ remove_tags: [t] })}
-              onFavorite={(on) => bulk({ favorite: on })}
+              onFavorite={(on) => bulk({ favorite: on })} onRotate={(d) => bulk({ rotate: d })}
               onSelectAll={async () => setSelected(new Set(await api.itemIds(query)))}
               onClear={() => setSelected(new Set())} />
           ) : (

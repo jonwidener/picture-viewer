@@ -97,7 +97,7 @@ export default function Slideshow({ source, start = 0, onClose }: { source: Sour
     <div ref={box} onMouseMove={wake} className={`fixed inset-0 z-40 bg-black ${show ? '' : 'cursor-none'}`}>
       <div className="flex h-full w-full items-center justify-center" onClick={() => setPaused((p) => !p)}>
         {n === 0 && <p className="text-neutral-500">Nothing to play.</p>}
-        {isVideo && video && <VideoPlayer key={video.id} file={video} paused={paused} onEnded={() => go(1)}
+        {isVideo && video && <VideoPlayer key={video.v} file={video} paused={paused} onEnded={() => go(1)}
           onError={() => setTimeout(() => goRef.current(1), 2000)} />}
         {!isVideo && still && <img key={still.id} src={originalUrl(still)} alt="" className="max-h-full max-w-full object-contain" />}
       </div>

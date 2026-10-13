@@ -176,17 +176,23 @@ SORTS = {
 }
 
 
+def _ver(mtime_ns, rotation):
+    """Cache-busting token for media URLs: changes when the file or its rotation changes."""
+    return f"{mtime_ns // 1_000_000_000}r{rotation}"
+
+
 def serialize_items(db, rows):
     ids = [r["id"] for r in rows]
     if not ids:
         return []
     marks = ",".join("?" * len(ids))
     files, tags = {}, {}
+    rot = {r["id"]: r["rotation"] for r in rows}
     for f in db.execute(f"SELECT id, item_id, kind, role, width, height, duration, mtime, missing FROM files "
                         f"WHERE item_id IN ({marks}) ORDER BY kind='video', id", ids):
         files.setdefault(f["item_id"], []).append(
             {"id": f["id"], "kind": f["kind"], "role": f["role"], "width": f["width"], "height": f["height"],
-             "duration": f["duration"], "v": f["mtime"] // 1_000_000_000, "missing": bool(f["missing"])})
+             "duration": f["duration"], "v": _ver(f["mtime"], rot[f["item_id"]]), "missing": bool(f["missing"])})
     for t in db.execute(f"SELECT it.item_id, t.id, t.name FROM item_tags it JOIN tags t ON t.id=it.tag_id "
                         f"WHERE it.item_id IN ({marks}) ORDER BY t.name", ids):
         tags.setdefault(t["item_id"], []).append({"id": t["id"], "name": t["name"]})
@@ -196,7 +202,7 @@ def serialize_items(db, rows):
         has_image = any(f["kind"] == "image" for f in fs)
         itype = "live" if any(f["role"] == "motion" for f in fs) else ("image" if has_image else "video")
         out.append({"id": r["id"], "name": r["name"], "favorite": bool(r["favorite"]), "taken_at": r["taken_at"],
-                    "type": itype, "files": fs, "tags": tags.get(r["id"], []),
+                    "rotation": r["rotation"], "type": itype, "files": fs, "tags": tags.get(r["id"], []),
                     "cover_file_id": fs[0]["id"] if fs else None})
     return out
 
@@ -250,6 +256,8 @@ def patch_item(iid):
         db.execute("UPDATE items SET name=? WHERE id=?", (name or None, iid))
     if "favorite" in body:
         db.execute("UPDATE items SET favorite=? WHERE id=?", (int(bool(body["favorite"])), iid))
+    if body.get("rotate") in (90, 180, 270, -90):
+        db.execute("UPDATE items SET rotation=(rotation + ? + 360) % 360 WHERE id=?", (body["rotate"], iid))
     if "tags" in body:
         _set_tags(db, iid, body["tags"])
     db.commit()
@@ -269,6 +277,8 @@ def bulk():
             db.executemany("DELETE FROM item_tags WHERE item_id=? AND tag_id=?", [(i, row["id"]) for i in ids])
     if body.get("favorite") is not None:
         db.executemany("UPDATE items SET favorite=? WHERE id=?", [(int(bool(body["favorite"])), i) for i in ids])
+    if body.get("rotate") in (90, 180, 270, -90):
+        db.executemany("UPDATE items SET rotation=(rotation + ? + 360) % 360 WHERE id=?", [(body["rotate"], i) for i in ids])
     db.commit()
     return "", 204
 
@@ -293,13 +303,13 @@ def duplicates():
         entries = []
         for f in db.execute(
             "SELECT f.id AS file_id, f.item_id, f.kind, f.size, f.mtime, f.width, f.height, f.duration, f.rel_path, "
-            "r.path AS root_path, i.name, i.favorite, i.taken_at FROM files f JOIN roots r ON r.id=f.root_id "
+            "r.path AS root_path, i.name, i.favorite, i.taken_at, i.rotation FROM files f JOIN roots r ON r.id=f.root_id "
             "JOIN items i ON i.id=f.item_id WHERE f.full_hash=? AND f.missing=0 AND r.enabled=1 ORDER BY f.id", (h,)):
             tags = [t[0] for t in db.execute(
                 "SELECT t.name FROM item_tags it JOIN tags t ON t.id=it.tag_id WHERE it.item_id=? ORDER BY t.name",
                 (f["item_id"],))]
             entries.append({"file_id": f["file_id"], "item_id": f["item_id"], "kind": f["kind"], "size": f["size"],
-                            "v": f["mtime"] // 1_000_000_000, "width": f["width"], "height": f["height"],
+                            "v": _ver(f["mtime"], f["rotation"]), "width": f["width"], "height": f["height"],
                             "duration": f["duration"], "path": os.path.join(f["root_path"], f["rel_path"]),
                             "name": f["name"], "favorite": bool(f["favorite"]), "taken_at": f["taken_at"], "tags": tags})
         groups.append({"hash": h, "size": entries[0]["size"] if entries else 0, "entries": entries})
@@ -398,7 +408,8 @@ def reorder_slideshow(sid):
 
 def _file_or_404(fid):
     f = get_db().execute(
-        "SELECT f.*, r.path AS root_path, r.enabled FROM files f JOIN roots r ON r.id=f.root_id WHERE f.id=?",
+        "SELECT f.*, i.rotation, r.path AS root_path, r.enabled FROM files f JOIN roots r ON r.id=f.root_id "
+        "JOIN items i ON i.id=f.item_id WHERE f.id=?",
         (fid,)).fetchone()
     if not f or f["missing"] or not f["enabled"]:
         abort(404)
@@ -427,7 +438,7 @@ def file_original(fid):
     """Image rendition for the viewer (HEIC converted to JPEG), or the raw video file."""
     f, src = _file_or_404(fid)
     ext = src.suffix.lower()
-    if f["kind"] == "image" and ext in media.DERIVE_EXT:
+    if f["kind"] == "image" and (ext in media.DERIVE_EXT or f["rotation"]):
         return _send(media.display_path(current_app.config["CACHE_DIR"], f, src), mimetype="image/jpeg")
     return _send(src, mimetype="video/mp4" if ext == ".mov" else None)
 
@@ -438,7 +449,7 @@ def file_playback(fid):
     status, path = media.playback_status(current_app.config["CACHE_DIR"], f, src, src.suffix.lower())
     if status == "error":
         with media._jobs_lock:
-            return jsonify(status="error", error=media._jobs[fid]["error"])
+            return jsonify(status="error", error=media._jobs[(fid, f["rotation"])]["error"])
     return jsonify(status=status, url=f"/api/files/{fid}/stream?v={f['mtime']}" if status == "ready" else None)
 
 

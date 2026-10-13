@@ -21,7 +21,7 @@ DISPLAY_SIZE = 2560
 
 _gen_slots = threading.BoundedSemaphore(4)
 _executor = ThreadPoolExecutor(max_workers=2)
-_jobs = {}  # file_id -> {"status": "processing"|"error", "error": str}
+_jobs = {}  # (file_id, rotation) -> {"status": "processing"|"error", "error": str}
 _jobs_lock = threading.Lock()
 
 
@@ -107,10 +107,17 @@ def _atomic_write(dest, write):
         tmp.unlink(missing_ok=True)
 
 
-def _save_jpeg(src, dest, size, quality):
+def _vf_rotate(rotation):
+    """ffmpeg filters rotating clockwise by `rotation` degrees (applied after auto-rotation)."""
+    return {90: ["transpose=1"], 180: ["transpose=1", "transpose=1"], 270: ["transpose=2"]}.get(rotation, [])
+
+
+def _save_jpeg(src, dest, size, quality, rotation=0):
     def write(tmp):
         with Image.open(src) as im:
             im = ImageOps.exif_transpose(im)
+            if rotation:
+                im = im.rotate(-rotation, expand=True)  # PIL rotates counterclockwise
             im.thumbnail((size, size))
             im.convert("RGB").save(tmp, "JPEG", quality=quality)
 
@@ -119,20 +126,20 @@ def _save_jpeg(src, dest, size, quality):
 
 def thumb_path(cache_dir, f, src):
     """Return path to a cached JPEG thumbnail, generating it if needed."""
-    dest = Path(cache_dir) / "thumbs" / f"{f['id']}-{f['mtime']}.jpg"
+    dest = Path(cache_dir) / "thumbs" / f"{f['id']}-{f['mtime']}-{f['rotation']}.jpg"
     if dest.exists():
         return dest
     dest.parent.mkdir(exist_ok=True)
     with _gen_slots:
         if f["kind"] == "image":
-            _save_jpeg(src, dest, THUMB_SIZE, 80)
+            _save_jpeg(src, dest, THUMB_SIZE, 80, f["rotation"])
         else:
             t = "1" if (f["duration"] or 0) > 2 else "0"
 
             def write(tmp):
                 subprocess.run(
                     ["ffmpeg", "-v", "error", "-y", "-ss", t, "-i", str(src), "-frames:v", "1",
-                     "-vf", f"scale={THUMB_SIZE}:{THUMB_SIZE}:force_original_aspect_ratio=decrease",
+                     "-vf", ",".join(_vf_rotate(f["rotation"]) + [f"scale={THUMB_SIZE}:{THUMB_SIZE}:force_original_aspect_ratio=decrease"]),
                      "-q:v", "4", str(tmp)],
                     check=True, timeout=120,
                 )
@@ -143,41 +150,42 @@ def thumb_path(cache_dir, f, src):
 
 def display_path(cache_dir, f, src):
     """JPEG rendition for formats browsers can't show (HEIC)."""
-    dest = Path(cache_dir) / "display" / f"{f['id']}-{f['mtime']}.jpg"
+    dest = Path(cache_dir) / "display" / f"{f['id']}-{f['mtime']}-{f['rotation']}.jpg"
     if dest.exists():
         return dest
     dest.parent.mkdir(exist_ok=True)
     with _gen_slots:
-        _save_jpeg(src, dest, DISPLAY_SIZE, 90)
+        _save_jpeg(src, dest, DISPLAY_SIZE, 90, f["rotation"])
     return dest
 
 
 def needs_transcode(f, ext):
-    return f["codec"] != "h264" or ext not in {".mp4", ".m4v", ".mov"}
+    return f["codec"] != "h264" or ext not in {".mp4", ".m4v", ".mov"} or bool(f["rotation"])
 
 
 def transcode_dest(cache_dir, f):
-    return Path(cache_dir) / "video" / f"{f['id']}-{f['mtime']}.mp4"
+    return Path(cache_dir) / "video" / f"{f['id']}-{f['mtime']}-{f['rotation']}.mp4"
 
 
-def _transcode(file_id, src, dest):
+def _transcode(job, src, dest, rotation):
     try:
         dest.parent.mkdir(exist_ok=True)
 
         def write(tmp):
             subprocess.run(
-                ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-c:v", "libx264", "-preset", "veryfast",
+                ["ffmpeg", "-v", "error", "-y", "-i", str(src), *(["-vf", ",".join(_vf_rotate(rotation))] if rotation else []),
+                 "-c:v", "libx264", "-preset", "veryfast",
                  "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", str(tmp)],
                 check=True, capture_output=True,
             )
 
         _atomic_write(dest, write)
         with _jobs_lock:
-            _jobs.pop(file_id, None)
+            _jobs.pop(job, None)
     except Exception as e:  # keep the error so the UI can report it
         err = getattr(e, "stderr", b"") or b""
         with _jobs_lock:
-            _jobs[file_id] = {"status": "error", "error": (err.decode(errors="ignore") or str(e))[-300:]}
+            _jobs[job] = {"status": "error", "error": (err.decode(errors="ignore") or str(e))[-300:]}
 
 
 def playback_status(cache_dir, f, src, ext):
@@ -187,9 +195,10 @@ def playback_status(cache_dir, f, src, ext):
     dest = transcode_dest(cache_dir, f)
     if dest.exists():
         return "ready", dest
+    key = (f["id"], f["rotation"])
     with _jobs_lock:
-        job = _jobs.get(f["id"])
+        job = _jobs.get(key)
         if job is None:
-            _jobs[f["id"]] = job = {"status": "processing"}
-            _executor.submit(_transcode, f["id"], src, dest)
+            _jobs[key] = job = {"status": "processing"}
+            _executor.submit(_transcode, key, src, dest, f["rotation"])
     return job["status"], None
