@@ -13,6 +13,13 @@ export interface ScanStatus {
   running: boolean; phase: string; processed: number; total: number
   added: number; relinked: number; updated: number; missing: number; paired: number; error: string | null
 }
+export interface DupEntry {
+  file_id: number; item_id: number; kind: 'image' | 'video'; size: number; v: number
+  width: number | null; height: number | null; duration: number | null
+  path: string; name: string | null; favorite: boolean; taken_at: number; tags: string[]
+}
+export interface DupGroup { hash: string; size: number; entries: DupEntry[] }
+export interface Slideshow { id: number; name: string; count: number }
 export interface Filters {
   q: string; sort: 'taken' | 'added' | 'name'; dir: 'asc' | 'desc'
   type: '' | 'image' | 'video' | 'live'; favorite: boolean; untagged: boolean; unnamed: boolean; missing: boolean
@@ -73,6 +80,17 @@ export const api = {
   deleteRoot: (id: number) => req<void>(`/roots/${id}`, { method: 'DELETE' }),
   scan: () => req<ScanStatus>('/scan', { method: 'POST' }),
   scanStatus: () => req<ScanStatus>('/scan/status'),
+  duplicates: (offset: number, limit: number) =>
+    req<{ total: number; wasted_bytes: number; groups: DupGroup[] }>(`/duplicates?offset=${offset}&limit=${limit}`),
+  slideshows: () => req<Slideshow[]>('/slideshows'),
+  createSlideshow: (name: string) => req<Slideshow>('/slideshows', json('POST', { name })),
+  renameSlideshow: (id: number, name: string) => req<Slideshow>(`/slideshows/${id}`, json('PATCH', { name })),
+  deleteSlideshow: (id: number) => req<void>(`/slideshows/${id}`, { method: 'DELETE' }),
+  slideshow: (id: number) => req<Slideshow & { items: Item[] }>(`/slideshows/${id}`),
+  addToSlideshow: (id: number, ids: number[]) => req<Slideshow>(`/slideshows/${id}/items`, json('POST', { ids })),
+  removeFromSlideshow: (id: number, itemId: number) =>
+    req<void>(`/slideshows/${id}/items/${itemId}`, { method: 'DELETE' }),
+  reorderSlideshow: (id: number, ids: number[]) => req<void>(`/slideshows/${id}/order`, json('PUT', { ids })),
   playback: (fileId: number) =>
     req<{ status: 'ready' | 'processing' | 'error'; url: string | null; error?: string }>(`/files/${fileId}/playback`),
 }
@@ -87,4 +105,11 @@ export const fmtDuration = (s: number | null) => {
   if (s == null) return ''
   const m = Math.floor(s / 60)
   return `${m}:${String(Math.round(s % 60)).padStart(2, '0')}`
+}
+
+export const fmtBytes = (n: number) => {
+  const u = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ }
+  return `${n.toFixed(i ? 1 : 0)} ${u[i]}`
 }

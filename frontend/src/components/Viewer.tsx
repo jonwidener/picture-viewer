@@ -1,39 +1,15 @@
 import { useEffect, useState } from 'react'
-import { api, fmtDate, originalUrl, type FileInfo, type TagCount } from '../api'
+import { api, fmtDate, originalUrl, type TagCount } from '../api'
+import AddToSlideshow from './AddToSlideshow'
+import VideoPlayer from './VideoPlayer'
 import type { ItemsHandle } from '../useItems'
-
-function VideoPlayer({ file }: { file: FileInfo }) {
-  const [state, setState] = useState<{ status: string; url: string | null; error?: string }>({ status: 'processing', url: null })
-
-  useEffect(() => {
-    let alive = true
-    let timer: number
-    const poll = async () => {
-      try {
-        const s = await api.playback(file.id)
-        if (!alive) return
-        setState(s)
-        if (s.status === 'processing') timer = window.setTimeout(poll, 1500)
-      } catch (e) {
-        if (alive) setState({ status: 'error', url: null, error: String(e) })
-      }
-    }
-    poll()
-    return () => { alive = false; clearTimeout(timer) }
-  }, [file.id])
-
-  if (state.status === 'ready' && state.url)
-    return <video key={state.url} src={state.url} controls autoPlay playsInline className="max-h-full max-w-full" />
-  if (state.status === 'error') return <p className="text-red-400">Can't play this video. {state.error}</p>
-  return <p className="animate-pulse text-neutral-400">Converting video for playback…</p>
-}
 
 interface Props {
   items: ItemsHandle; index: number; tags: TagCount[]
-  onIndex: (i: number) => void; onClose: () => void; onChanged: () => void
+  onIndex: (i: number) => void; onClose: () => void; onChanged: () => void; onSlideshow: (index: number) => void
 }
 
-export default function Viewer({ items, index, tags, onIndex, onClose, onChanged }: Props) {
+export default function Viewer({ items, index, tags, onIndex, onClose, onChanged, onSlideshow }: Props) {
   const item = items.get(index)
   const [motion, setMotion] = useState(false)
   const [draft, setDraft] = useState<string | null>(null)
@@ -107,6 +83,12 @@ export default function Viewer({ items, index, tags, onIndex, onClose, onChanged
               {item.type === 'live' ? 'Live Photo' : item.type === 'video' ? 'Video' : 'Photo'}
               {(still ?? video)?.width ? ` · ${(still ?? video)!.width}×${(still ?? video)!.height}` : ''}
             </p>
+            <div className="space-y-2">
+              <button className="w-full rounded bg-neutral-800 px-2 py-1.5 text-sm hover:bg-neutral-700" onClick={() => onSlideshow(index)}>
+                ▶ Slideshow from here
+              </button>
+              <AddToSlideshow ids={[item.id]} />
+            </div>
             <div>
               <h3 className="mb-1 text-xs uppercase tracking-wide text-neutral-500">Tags</h3>
               <div className="mb-2 flex flex-wrap gap-1">

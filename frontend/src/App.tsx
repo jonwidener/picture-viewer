@@ -2,18 +2,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, defaultFilters, filterQuery, type Filters, type Item, type TagCount } from './api'
 import BulkBar from './components/BulkBar'
 import FilterBar from './components/FilterBar'
+import Duplicates from './components/Duplicates'
 import Grid from './components/Grid'
 import Settings from './components/Settings'
+import SlideshowPlayer from './components/Slideshow'
+import Slideshows from './components/Slideshows'
 import Viewer from './components/Viewer'
 import { useItems } from './useItems'
 
 export default function App() {
-  const [page, setPage] = useState<'library' | 'settings'>('library')
+  const [page, setPage] = useState<'library' | 'duplicates' | 'slideshows' | 'settings'>('library')
   const [filters, setFilters] = useState<Filters>(defaultFilters)
   const [debouncedQ, setDebouncedQ] = useState('')
   const [tags, setTags] = useState<TagCount[]>([])
   const [sel, setSel] = useState<{ query: string; ids: Set<number> }>({ query: '', ids: new Set() })
   const [viewing, setViewing] = useState<number | null>(null)
+  const [playFrom, setPlayFrom] = useState<number | null>(null)
   const lastClicked = useRef<number | null>(null)
 
   useEffect(() => {
@@ -66,21 +70,26 @@ export default function App() {
       <header className="flex items-center gap-2 border-b border-neutral-800 px-3 py-2">
         <span className="mr-2 font-semibold">Pictures</span>
         {navBtn('library', 'Library')}
+        {navBtn('duplicates', 'Duplicates')}
+        {navBtn('slideshows', 'Slideshows')}
         {navBtn('settings', 'Settings')}
       </header>
 
       {page === 'settings' && <div className="min-h-0 flex-1 overflow-y-auto"><Settings onScanned={onScanned} /></div>}
 
+      {page === 'duplicates' && <div className="min-h-0 flex-1"><Duplicates tags={tags} onTagsChanged={loadTags} /></div>}
+      {page === 'slideshows' && <div className="min-h-0 flex-1"><Slideshows /></div>}
+
       {page === 'library' && (
         <>
           {selected.size > 0 ? (
-            <BulkBar count={selected.size} tags={tags}
+            <BulkBar count={selected.size} ids={[...selected]} tags={tags}
               onAdd={(t) => bulk({ add_tags: [t] })} onRemove={(t) => bulk({ remove_tags: [t] })}
               onFavorite={(on) => bulk({ favorite: on })}
               onSelectAll={async () => setSelected(new Set(await api.itemIds(query)))}
               onClear={() => setSelected(new Set())} />
           ) : (
-            <FilterBar filters={filters} setFilters={setFilters} tags={tags} total={items.total} />
+            <FilterBar filters={filters} setFilters={setFilters} tags={tags} total={items.total} onPlay={() => setPlayFrom(0)} />
           )}
           <div className="min-h-0 flex-1">
             <Grid key={query} items={items} selected={selected} onOpen={setViewing} onToggle={toggle} />
@@ -90,8 +99,10 @@ export default function App() {
 
       {viewing !== null && (
         <Viewer key={viewing} items={items} index={viewing} tags={tags} onIndex={setViewing}
-          onClose={() => setViewing(null)} onChanged={loadTags} />
+          onClose={() => setViewing(null)} onChanged={loadTags}
+          onSlideshow={(i) => { setViewing(null); setPlayFrom(i) }} />
       )}
+      {playFrom !== null && <SlideshowPlayer source={items} start={playFrom} onClose={() => setPlayFrom(null)} />}
     </div>
   )
 }

@@ -5,9 +5,9 @@ const input = 'rounded bg-neutral-800 px-2 py-1 text-sm outline-none focus:ring-
 const chip = (on: boolean) =>
   `rounded px-2 py-1 text-sm ${on ? 'bg-sky-600 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'}`
 
-interface Props { filters: Filters; setFilters: (f: Filters) => void; tags: TagCount[]; total: number }
+interface Props { filters: Filters; setFilters: (f: Filters) => void; tags: TagCount[]; total: number; onPlay: () => void }
 
-export default function FilterBar({ filters, setFilters, tags, total }: Props) {
+export default function FilterBar({ filters, setFilters, tags, total, onPlay }: Props) {
   const [open, setOpen] = useState(false)
   const set = (p: Partial<Filters>) => setFilters({ ...filters, ...p })
   const toggleTag = (id: number) =>
@@ -58,6 +58,7 @@ export default function FilterBar({ filters, setFilters, tags, total }: Props) {
 
       <div className="ml-auto flex items-center gap-2">
         <span className="text-sm text-neutral-500">{total.toLocaleString()} items</span>
+        <button className={chip(false)} disabled={total === 0} onClick={onPlay}>▶ Slideshow</button>
         <select className={input} value={filters.sort} onChange={(e) => set({ sort: e.target.value as Filters['sort'] })}>
           <option value="taken">Date taken</option><option value="added">Date added</option><option value="name">Name</option>
         </select>
