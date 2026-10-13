@@ -58,6 +58,8 @@ def patch_root(rid):
 
 @bp.delete("/roots/<int:rid>")
 def delete_root(rid):
+    if scanner.get_status()["running"]:
+        return err("Can't remove a folder while a scan is running", 409)
     db = get_db()
     db.execute("DELETE FROM roots WHERE id=?", (rid,))
     db.execute("DELETE FROM items WHERE id NOT IN (SELECT item_id FROM files)")

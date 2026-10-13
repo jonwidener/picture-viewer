@@ -8,6 +8,7 @@ export default function Settings({ onScanned }: { onScanned: () => void }) {
   const [path, setPath] = useState('')
   const [error, setError] = useState('')
   const [scan, setScan] = useState<ScanStatus | null>(null)
+  const [allowRemove, setAllowRemove] = useState(false)
 
   const load = () => api.roots().then(setRoots)
   useEffect(() => { load(); api.scanStatus().then(setScan) }, [])
@@ -44,12 +45,18 @@ export default function Settings({ onScanned }: { onScanned: () => void }) {
               <label className="flex items-center gap-1 text-sm text-neutral-400">
                 <input type="checkbox" checked={r.enabled} onChange={(e) => attempt(() => api.setRootEnabled(r.id, e.target.checked))} /> enabled
               </label>
-              <button className="text-sm text-red-400 hover:text-red-300"
+              <button className="text-sm text-red-400 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-red-400"
+                disabled={!allowRemove || !!scan?.running}
+                title={scan?.running ? 'Not available while scanning' : !allowRemove ? 'Tick “Allow removing folders” first' : undefined}
                 onClick={() => confirm(`Remove ${r.path}? Its files, names and tags are forgotten.`) && attempt(() => api.deleteRoot(r.id))}>Remove</button>
             </li>
           ))}
           {roots.length === 0 && <li className="text-sm text-neutral-500">No folders yet.</li>}
         </ul>
+        <label className="mb-3 flex items-center gap-2 text-sm text-neutral-400">
+          <input type="checkbox" checked={allowRemove} onChange={(e) => setAllowRemove(e.target.checked)} />
+          Allow removing folders
+        </label>
         <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); attempt(async () => { await api.addRoot(path); setPath('') }) }}>
           <input className="flex-1 rounded bg-neutral-800 px-2 py-1.5 font-mono text-sm outline-none focus:ring-1 focus:ring-sky-500"
             placeholder="/path/to/photos" value={path} onChange={(e) => setPath(e.target.value)} />
