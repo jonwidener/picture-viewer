@@ -86,6 +86,9 @@ def _run(db_path):
         _set(missing=missing)
         _set(paired=_pair_live_photos(conn))
         conn.commit()
+        _set(phase="hashing")
+        _hash_duplicate_candidates(conn)
+        conn.commit()
         _set(phase="done")
     except Exception as e:
         _set(error=str(e), phase="error")
@@ -127,7 +130,7 @@ def _index_file(conn, root_id, rel, full):
     kind = media.kind_for(ext)
     if row:
         conn.execute(
-            "UPDATE files SET fingerprint=?, size=?, mtime=?, width=?, height=?, duration=?, codec=?, missing=0 WHERE id=?",
+            "UPDATE files SET fingerprint=?, size=?, mtime=?, width=?, height=?, duration=?, codec=?, full_hash=NULL, missing=0 WHERE id=?",
             (fp, size, mtime, m.get("width"), m.get("height"), m.get("duration"), m.get("codec"), row["id"]))
         _bump("updated")
         return
@@ -173,3 +176,26 @@ def _pair_live_photos(conn):
         conn.execute("DELETE FROM items WHERE id=?", (drop,))
         paired += 1
     return paired
+
+
+def full_hash(path):
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        while chunk := f.read(1 << 20):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _hash_duplicate_candidates(conn):
+    """Fully hash files sharing a quick fingerprint, so exact duplicates can be confirmed."""
+    rows = conn.execute(
+        "SELECT f.id, f.rel_path, r.path AS root_path FROM files f JOIN roots r ON r.id=f.root_id "
+        "WHERE f.missing=0 AND f.full_hash IS NULL AND r.enabled=1 AND (f.fingerprint, f.size) IN "
+        "(SELECT fingerprint, size FROM files WHERE missing=0 GROUP BY fingerprint, size HAVING COUNT(*)>1)"
+    ).fetchall()
+    for row in rows:
+        try:
+            h = full_hash(os.path.join(row["root_path"], row["rel_path"]))
+        except OSError:
+            continue
+        conn.execute("UPDATE files SET full_hash=? WHERE id=?", (h, row["id"]))

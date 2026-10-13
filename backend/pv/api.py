@@ -273,6 +273,127 @@ def bulk():
     return "", 204
 
 
+# ---------- duplicates ----------
+
+@bp.get("/duplicates")
+def duplicates():
+    """Groups of items whose files are byte-identical (confirmed by full hash)."""
+    db = get_db()
+    limit = min(max(int(request.args.get("limit", 50)), 1), 200)
+    offset = max(int(request.args.get("offset", 0)), 0)
+    base = ("FROM files f JOIN roots r ON r.id=f.root_id WHERE f.missing=0 AND r.enabled=1 "
+            "AND f.full_hash IS NOT NULL GROUP BY f.full_hash HAVING COUNT(DISTINCT f.item_id) > 1")
+    summary = db.execute(f"SELECT COUNT(*), COALESCE(SUM(sz * (n - 1)), 0) FROM "
+                         f"(SELECT MAX(f.size) AS sz, COUNT(DISTINCT f.item_id) AS n {base})").fetchone()
+    hashes = [r[0] for r in db.execute(
+        f"SELECT f.full_hash {base} ORDER BY MAX(f.size) * (COUNT(DISTINCT f.item_id) - 1) DESC, MIN(f.id) LIMIT ? OFFSET ?",
+        (limit, offset))]
+    groups = []
+    for h in hashes:
+        entries = []
+        for f in db.execute(
+            "SELECT f.id AS file_id, f.item_id, f.kind, f.size, f.mtime, f.width, f.height, f.duration, f.rel_path, "
+            "r.path AS root_path, i.name, i.favorite, i.taken_at FROM files f JOIN roots r ON r.id=f.root_id "
+            "JOIN items i ON i.id=f.item_id WHERE f.full_hash=? AND f.missing=0 AND r.enabled=1 ORDER BY f.id", (h,)):
+            tags = [t[0] for t in db.execute(
+                "SELECT t.name FROM item_tags it JOIN tags t ON t.id=it.tag_id WHERE it.item_id=? ORDER BY t.name",
+                (f["item_id"],))]
+            entries.append({"file_id": f["file_id"], "item_id": f["item_id"], "kind": f["kind"], "size": f["size"],
+                            "v": f["mtime"] // 1_000_000_000, "width": f["width"], "height": f["height"],
+                            "duration": f["duration"], "path": os.path.join(f["root_path"], f["rel_path"]),
+                            "name": f["name"], "favorite": bool(f["favorite"]), "taken_at": f["taken_at"], "tags": tags})
+        groups.append({"hash": h, "size": entries[0]["size"] if entries else 0, "entries": entries})
+    return jsonify(total=summary[0], wasted_bytes=summary[1], groups=groups)
+
+
+# ---------- slideshows ----------
+
+def _slideshow_json(db, sid):
+    row = db.execute("SELECT s.id, s.name, (SELECT COUNT(*) FROM slideshow_items si JOIN items i ON i.id=si.item_id "
+                     f"WHERE si.slideshow_id=s.id AND {AVAILABLE}) AS count FROM slideshows s WHERE s.id=?", (sid,)).fetchone()
+    return dict(row) if row else None
+
+
+@bp.get("/slideshows")
+def list_slideshows():
+    db = get_db()
+    return jsonify([_slideshow_json(db, r[0]) for r in db.execute("SELECT id FROM slideshows ORDER BY name COLLATE NOCASE")])
+
+
+@bp.post("/slideshows")
+def create_slideshow():
+    name = " ".join(str((request.get_json(silent=True) or {}).get("name", "")).split())[:100]
+    if not name:
+        return err("Name required")
+    db = get_db()
+    sid = db.execute("INSERT INTO slideshows (name) VALUES (?)", (name,)).lastrowid
+    db.commit()
+    return jsonify(_slideshow_json(db, sid)), 201
+
+
+@bp.patch("/slideshows/<int:sid>")
+def rename_slideshow(sid):
+    name = " ".join(str((request.get_json(silent=True) or {}).get("name", "")).split())[:100]
+    if not name:
+        return err("Name required")
+    db = get_db()
+    db.execute("UPDATE slideshows SET name=? WHERE id=?", (name, sid))
+    db.commit()
+    return jsonify(_slideshow_json(db, sid))
+
+
+@bp.delete("/slideshows/<int:sid>")
+def delete_slideshow(sid):
+    db = get_db()
+    db.execute("DELETE FROM slideshows WHERE id=?", (sid,))
+    db.commit()
+    return "", 204
+
+
+@bp.get("/slideshows/<int:sid>")
+def get_slideshow(sid):
+    db = get_db()
+    show = _slideshow_json(db, sid)
+    if not show:
+        return err("Not found", 404)
+    rows = db.execute(f"SELECT i.* FROM items i JOIN slideshow_items si ON si.item_id=i.id AND si.slideshow_id=? "
+                      f"WHERE {AVAILABLE} ORDER BY si.position", (sid,)).fetchall()
+    return jsonify(**show, items=serialize_items(db, rows))
+
+
+@bp.post("/slideshows/<int:sid>/items")
+def add_slideshow_items(sid):
+    """Append items (in the given order); ones already present are skipped."""
+    db = get_db()
+    if not _slideshow_json(db, sid):
+        return err("Not found", 404)
+    ids = [i for i in (request.get_json(silent=True) or {}).get("ids", []) if isinstance(i, int)]
+    pos = db.execute("SELECT COALESCE(MAX(position), -1) FROM slideshow_items WHERE slideshow_id=?", (sid,)).fetchone()[0]
+    for iid in ids:
+        if db.execute("SELECT 1 FROM items WHERE id=?", (iid,)).fetchone():
+            pos += db.execute("INSERT OR IGNORE INTO slideshow_items VALUES (?,?,?)", (sid, iid, pos + 1)).rowcount
+    db.commit()
+    return jsonify(_slideshow_json(db, sid))
+
+
+@bp.delete("/slideshows/<int:sid>/items/<int:iid>")
+def remove_slideshow_item(sid, iid):
+    db = get_db()
+    db.execute("DELETE FROM slideshow_items WHERE slideshow_id=? AND item_id=?", (sid, iid))
+    db.commit()
+    return "", 204
+
+
+@bp.put("/slideshows/<int:sid>/order")
+def reorder_slideshow(sid):
+    db = get_db()
+    ids = [i for i in (request.get_json(silent=True) or {}).get("ids", []) if isinstance(i, int)]
+    db.executemany("UPDATE slideshow_items SET position=? WHERE slideshow_id=? AND item_id=?",
+                   [(n, sid, iid) for n, iid in enumerate(ids)])
+    db.commit()
+    return "", 204
+
+
 # ---------- media ----------
 
 def _file_or_404(fid):

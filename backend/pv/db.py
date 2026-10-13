@@ -40,6 +40,16 @@ CREATE TABLE IF NOT EXISTS item_tags (
     tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
     PRIMARY KEY (item_id, tag_id)
 );
+CREATE TABLE IF NOT EXISTS slideshows (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS slideshow_items (
+    slideshow_id INTEGER NOT NULL REFERENCES slideshows(id) ON DELETE CASCADE,
+    item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (slideshow_id, item_id)
+);
 CREATE INDEX IF NOT EXISTS idx_items_taken ON items(taken_at, id);
 CREATE INDEX IF NOT EXISTS idx_items_name ON items(name);
 CREATE INDEX IF NOT EXISTS idx_files_item ON files(item_id);
@@ -59,6 +69,9 @@ def connect(path):
 def init_db(path):
     conn = connect(path)
     conn.executescript(SCHEMA)
+    if "full_hash" not in {r["name"] for r in conn.execute("PRAGMA table_info(files)")}:
+        conn.execute("ALTER TABLE files ADD COLUMN full_hash TEXT")  # sha1 of whole file; only set for duplicate candidates
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_files_full_hash ON files(full_hash)")
     conn.commit()
     conn.close()
 
