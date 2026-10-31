@@ -5,7 +5,7 @@ export interface FileInfo {
   width: number | null; height: number | null; duration: number | null; v: string; missing: boolean
 }
 export interface Item {
-  id: number; name: string | null; favorite: boolean; taken_at: number; rotation: number
+  id: number; name: string | null; favorite: boolean; taken_at: number; rotation: number; deleted: boolean
   type: 'image' | 'video' | 'live'; files: FileInfo[]; tags: Tag[]; cover_file_id: number | null
 }
 export interface Root { id: number; path: string; enabled: boolean; exists: boolean; files: number }
@@ -67,9 +67,9 @@ export const api = {
   items: (query: string, offset: number, limit: number) =>
     req<{ total: number; items: Item[] }>(`/items?${query}&offset=${offset}&limit=${limit}`),
   itemIds: (query: string) => req<number[]>(`/items/ids?${query}`),
-  patchItem: (id: number, body: Partial<{ name: string; favorite: boolean; tags: string[]; rotate: 90 | -90 }>) =>
+  patchItem: (id: number, body: Partial<{ name: string; favorite: boolean; tags: string[]; rotate: 90 | -90; deleted: boolean }>) =>
     req<Item>(`/items/${id}`, json('PATCH', body)),
-  bulk: (body: { ids: number[]; add_tags?: string[]; remove_tags?: string[]; favorite?: boolean; rotate?: 90 | -90 }) =>
+  bulk: (body: { ids: number[]; add_tags?: string[]; remove_tags?: string[]; favorite?: boolean; rotate?: 90 | -90; deleted?: boolean }) =>
     req<void>('/items/bulk', json('POST', body)),
   tags: () => req<TagCount[]>('/tags'),
   renameTag: (id: number, name: string) => req<void>(`/tags/${id}`, json('PATCH', { name })),

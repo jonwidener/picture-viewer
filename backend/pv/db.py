@@ -73,6 +73,8 @@ def init_db(path):
         conn.execute("ALTER TABLE files ADD COLUMN full_hash TEXT")  # sha1 of whole file; only set for duplicate candidates
     if "rotation" not in {r["name"] for r in conn.execute("PRAGMA table_info(items)")}:
         conn.execute("ALTER TABLE items ADD COLUMN rotation INTEGER NOT NULL DEFAULT 0")  # display rotation, clockwise degrees
+    if "deleted" not in {r["name"] for r in conn.execute("PRAGMA table_info(items)")}:
+        conn.execute("ALTER TABLE items ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")  # quarantined: hidden from the app, files untouched
     conn.execute("CREATE INDEX IF NOT EXISTS idx_files_full_hash ON files(full_hash)")
     conn.commit()
     conn.close()

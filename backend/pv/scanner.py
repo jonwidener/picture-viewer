@@ -170,7 +170,8 @@ def _pair_live_photos(conn):
         conn.execute("INSERT OR IGNORE INTO item_tags (item_id, tag_id) SELECT ?, tag_id FROM item_tags WHERE item_id=?",
                      (keep, drop))
         conn.execute("UPDATE items SET favorite = favorite OR (SELECT favorite FROM items WHERE id=?), "
-                     "name = COALESCE(name, (SELECT name FROM items WHERE id=?)) WHERE id=?", (drop, drop, keep))
+                     "deleted = deleted OR (SELECT deleted FROM items WHERE id=?), "
+                     "name = COALESCE(name, (SELECT name FROM items WHERE id=?)) WHERE id=?", (drop, drop, drop, keep))
         conn.execute("UPDATE files SET item_id=?, role='motion' WHERE id=?", (keep, vid["id"]))
         conn.execute("UPDATE files SET role='still' WHERE id=?", (img["id"],))
         conn.execute("DELETE FROM items WHERE id=?", (drop,))

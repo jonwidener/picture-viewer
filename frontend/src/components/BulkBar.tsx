@@ -8,9 +8,10 @@ interface Props {
   count: number; ids: number[]; tags: TagCount[]
   onAdd: (tag: string) => void; onRemove: (tag: string) => void
   onFavorite: (on: boolean) => void; onRotate: (deg: 90 | -90) => void; onSelectAll?: () => void; onClear: () => void
+  onDelete?: () => void; onRestore?: () => void  // mark deleted (quarantine; files untouched) / restore
 }
 
-export default function BulkBar({ count, ids, tags, onAdd, onRemove, onFavorite, onRotate, onSelectAll, onClear }: Props) {
+export default function BulkBar({ count, ids, tags, onAdd, onRemove, onFavorite, onRotate, onSelectAll, onClear, onDelete, onRestore }: Props) {
   const [tag, setTag] = useState('')
   const act = (fn: (t: string) => void) => { if (tag.trim()) { fn(tag.trim()); setTag('') } }
   return (
@@ -27,6 +28,8 @@ export default function BulkBar({ count, ids, tags, onAdd, onRemove, onFavorite,
       <button className={btn} title="Rotate left" onClick={() => onRotate(-90)}>⟲</button>
       <button className={btn} title="Rotate right" onClick={() => onRotate(90)}>⟳</button>
       <div className="w-48"><AddToSlideshow ids={ids} /></div>
+      {onDelete && <button className={`${btn} text-red-300`} title="Hide from the app (files on disk are not touched)" onClick={onDelete}>🗑 Delete</button>}
+      {onRestore && <button className={`${btn} text-green-300`} onClick={onRestore}>↩ Restore</button>}
       {onSelectAll && <button className={`${btn} ml-auto`} onClick={onSelectAll}>Select all matching</button>}
       <button className={`${btn} ${onSelectAll ? '' : 'ml-auto'}`} onClick={onClear}>Clear</button>
     </div>

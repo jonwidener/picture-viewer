@@ -8,8 +8,10 @@ from .db import get_db
 
 bp = Blueprint("api", __name__)
 
-AVAILABLE = ("EXISTS (SELECT 1 FROM files f JOIN roots r ON r.id=f.root_id "
+HAS_FILES = ("EXISTS (SELECT 1 FROM files f JOIN roots r ON r.id=f.root_id "
              "WHERE f.item_id=i.id AND f.missing=0 AND r.enabled=1)")
+# "deleted" = quarantined: only a DB flag, files are never touched. Hidden everywhere except the Deleted view.
+AVAILABLE = f"i.deleted=0 AND {HAS_FILES}"
 
 
 def err(msg, code=400):
@@ -129,8 +131,10 @@ def _like(w):
 
 def build_filters(args):
     where, params = [], []
-    if args.get("missing") == "1":
-        where.append("NOT " + AVAILABLE)
+    if args.get("deleted") == "1":
+        where.append("i.deleted=1 AND " + HAS_FILES)
+    elif args.get("missing") == "1":
+        where.append("i.deleted=0 AND NOT " + HAS_FILES)
     else:
         where.append(AVAILABLE)
 
@@ -204,7 +208,7 @@ def serialize_items(db, rows):
         has_image = any(f["kind"] == "image" for f in fs)
         itype = "live" if any(f["role"] == "motion" for f in fs) else ("image" if has_image else "video")
         out.append({"id": r["id"], "name": r["name"], "favorite": bool(r["favorite"]), "taken_at": r["taken_at"],
-                    "rotation": r["rotation"], "type": itype, "files": fs, "tags": tags.get(r["id"], []),
+                    "rotation": r["rotation"], "deleted": bool(r["deleted"]), "type": itype, "files": fs, "tags": tags.get(r["id"], []),
                     "cover_file_id": fs[0]["id"] if fs else None})
     return out
 
@@ -258,6 +262,8 @@ def patch_item(iid):
         db.execute("UPDATE items SET name=? WHERE id=?", (name or None, iid))
     if "favorite" in body:
         db.execute("UPDATE items SET favorite=? WHERE id=?", (int(bool(body["favorite"])), iid))
+    if "deleted" in body:
+        db.execute("UPDATE items SET deleted=? WHERE id=?", (int(bool(body["deleted"])), iid))
     if body.get("rotate") in (90, 180, 270, -90):
         db.execute("UPDATE items SET rotation=(rotation + ? + 360) % 360 WHERE id=?", (body["rotate"], iid))
     if "tags" in body:
@@ -279,6 +285,8 @@ def bulk():
             db.executemany("DELETE FROM item_tags WHERE item_id=? AND tag_id=?", [(i, row["id"]) for i in ids])
     if body.get("favorite") is not None:
         db.executemany("UPDATE items SET favorite=? WHERE id=?", [(int(bool(body["favorite"])), i) for i in ids])
+    if body.get("deleted") is not None:
+        db.executemany("UPDATE items SET deleted=? WHERE id=?", [(int(bool(body["deleted"])), i) for i in ids])
     if body.get("rotate") in (90, 180, 270, -90):
         db.executemany("UPDATE items SET rotation=(rotation + ? + 360) % 360 WHERE id=?", [(body["rotate"], i) for i in ids])
     db.commit()
@@ -293,7 +301,8 @@ def duplicates():
     db = get_db()
     limit = min(max(int(request.args.get("limit", 50)), 1), 200)
     offset = max(int(request.args.get("offset", 0)), 0)
-    base = ("FROM files f JOIN roots r ON r.id=f.root_id WHERE f.missing=0 AND r.enabled=1 "
+    base = ("FROM files f JOIN roots r ON r.id=f.root_id JOIN items i ON i.id=f.item_id "
+            "WHERE f.missing=0 AND r.enabled=1 AND i.deleted=0 "
             "AND f.full_hash IS NOT NULL GROUP BY f.full_hash HAVING COUNT(DISTINCT f.item_id) > 1")
     summary = db.execute(f"SELECT COUNT(*), COALESCE(SUM(sz * (n - 1)), 0) FROM "
                          f"(SELECT MAX(f.size) AS sz, COUNT(DISTINCT f.item_id) AS n {base})").fetchone()
@@ -306,7 +315,7 @@ def duplicates():
         for f in db.execute(
             "SELECT f.id AS file_id, f.item_id, f.kind, f.size, f.mtime, f.width, f.height, f.duration, f.rel_path, "
             "r.path AS root_path, i.name, i.favorite, i.taken_at, i.rotation FROM files f JOIN roots r ON r.id=f.root_id "
-            "JOIN items i ON i.id=f.item_id WHERE f.full_hash=? AND f.missing=0 AND r.enabled=1 ORDER BY f.id", (h,)):
+            "JOIN items i ON i.id=f.item_id WHERE f.full_hash=? AND f.missing=0 AND r.enabled=1 AND i.deleted=0 ORDER BY f.id", (h,)):
             tags = [t[0] for t in db.execute(
                 "SELECT t.name FROM item_tags it JOIN tags t ON t.id=it.tag_id WHERE it.item_id=? ORDER BY t.name",
                 (f["item_id"],))]

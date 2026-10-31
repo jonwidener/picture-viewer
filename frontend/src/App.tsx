@@ -11,7 +11,7 @@ import Viewer from './components/Viewer'
 import { useItems } from './useItems'
 
 export default function App() {
-  const [page, setPage] = useState<'library' | 'duplicates' | 'slideshows' | 'settings'>('library')
+  const [page, setPage] = useState<'library' | 'duplicates' | 'slideshows' | 'deleted' | 'settings'>('library')
   const [filters, setFilters] = useState<Filters>(defaultFilters)
   const [debouncedQ, setDebouncedQ] = useState('')
   const [tags, setTags] = useState<TagCount[]>([])
@@ -25,7 +25,7 @@ export default function App() {
     return () => clearTimeout(t)
   }, [filters.q])
 
-  const query = useMemo(() => filterQuery({ ...filters, q: debouncedQ }), [filters, debouncedQ])
+  const query = useMemo(() => filterQuery({ ...filters, q: debouncedQ }) + (page === 'deleted' ? '&deleted=1' : ''), [filters, debouncedQ, page])
   const items = useItems(query)
   const { reload } = items
   const empty = useMemo(() => new Set<number>(), [])
@@ -55,6 +55,7 @@ export default function App() {
 
   const bulk = async (body: Omit<Parameters<typeof api.bulk>[0], 'ids'>) => {
     await api.bulk({ ids: [...selected], ...body })
+    if (body.deleted !== undefined) setSelected(new Set())
     reload()
     loadTags()
   }
@@ -62,7 +63,7 @@ export default function App() {
   const onScanned = useCallback(() => { reload(); loadTags() }, [reload, loadTags])
 
   const navBtn = (p: typeof page, label: string) => (
-    <button onClick={() => setPage(p)} className={`rounded px-3 py-1 text-sm ${page === p ? 'bg-neutral-800' : 'text-neutral-400 hover:text-white'}`}>{label}</button>
+    <button onClick={() => { setPage(p); setViewing(null) }} className={`rounded px-3 py-1 text-sm ${page === p ? 'bg-neutral-800' : 'text-neutral-400 hover:text-white'}`}>{label}</button>
   )
 
   return (
@@ -72,6 +73,7 @@ export default function App() {
         {navBtn('library', 'Library')}
         {navBtn('duplicates', 'Duplicates')}
         {navBtn('slideshows', 'Slideshows')}
+        {navBtn('deleted', 'Deleted')}
         {navBtn('settings', 'Settings')}
       </header>
 
@@ -80,17 +82,20 @@ export default function App() {
       {page === 'duplicates' && <div className="min-h-0 flex-1"><Duplicates tags={tags} onTagsChanged={loadTags} /></div>}
       {page === 'slideshows' && <div className="min-h-0 flex-1"><Slideshows /></div>}
 
-      {page === 'library' && (
+      {(page === 'library' || page === 'deleted') && (
         <>
           {selected.size > 0 ? (
             <BulkBar count={selected.size} ids={[...selected]} tags={tags}
               onAdd={(t) => bulk({ add_tags: [t] })} onRemove={(t) => bulk({ remove_tags: [t] })}
               onFavorite={(on) => bulk({ favorite: on })} onRotate={(d) => bulk({ rotate: d })}
+              onDelete={page === 'library' ? () => bulk({ deleted: true }) : undefined}
+              onRestore={page === 'deleted' ? () => bulk({ deleted: false }) : undefined}
               onSelectAll={async () => setSelected(new Set(await api.itemIds(query)))}
               onClear={() => setSelected(new Set())} />
           ) : (
             <FilterBar filters={filters} setFilters={setFilters} tags={tags} total={items.total} onPlay={() => setPlayFrom(0)} />
           )}
+          {page === 'deleted' && <p className="border-b border-neutral-800 bg-red-950/40 px-3 py-1 text-xs text-red-300">Deleted items are hidden from the rest of the app. Files on disk are never touched; Restore brings them back.</p>}
           <div className="min-h-0 flex-1">
             <Grid key={query} items={items} selected={selected} onOpen={setViewing} onToggle={toggle} />
           </div>

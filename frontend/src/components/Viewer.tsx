@@ -23,6 +23,14 @@ export default function Viewer({ items, index, tags, onIndex, onClose, onChanged
     items.update(await api.patchItem(item.id, body))
     onChanged()
   }
+  const setDeleted = async (deleted: boolean) => {
+    if (!item) return
+    await api.patchItem(item.id, { deleted })
+    items.reload()  // item leaves this list; the next one slides into this index
+    if (items.total <= 1) onClose()
+    else if (index >= items.total - 1) onIndex(index - 1)
+    onChanged()
+  }
   const go = (d: number) => { const n = index + d; if (n >= 0 && n < items.total) onIndex(n) }
 
   useEffect(() => {
@@ -32,6 +40,7 @@ export default function Viewer({ items, index, tags, onIndex, onClose, onChanged
       else if (e.key === 'ArrowLeft') go(-1)
       else if (e.key === 'ArrowRight') go(1)
       else if (e.key === 'f' && item) save({ favorite: !item.favorite })
+      else if (e.key === 'Delete' && item) setDeleted(!item.deleted)
       else if (e.key.toLowerCase() === 'r' && item) save({ rotate: e.shiftKey ? -90 : 90 })
       else if (e.key === ' ' && item?.type === 'live') { e.preventDefault(); setMotion((m) => !m) }
     }
@@ -85,6 +94,9 @@ export default function Viewer({ items, index, tags, onIndex, onClose, onChanged
               <button className="rounded bg-neutral-800 px-2 py-1 text-lg hover:bg-neutral-700" title="Rotate right (R)"
                 onClick={() => save({ rotate: 90 })}>⟳</button>
             </div>
+            <button className={`w-full rounded bg-neutral-800 px-2 py-1.5 text-sm hover:bg-neutral-700 ${item.deleted ? 'text-green-300' : 'text-red-300'}`}
+              title="Only hides it in this app; files on disk are not touched (Delete key)"
+              onClick={() => setDeleted(!item.deleted)}>{item.deleted ? '↩ Restore' : '🗑 Delete (hide)'}</button>
             <p className="text-sm text-neutral-400">{fmtDate(item.taken_at)}</p>
             <p className="text-sm text-neutral-500">
               {item.type === 'live' ? 'Live Photo' : item.type === 'video' ? 'Video' : 'Photo'}

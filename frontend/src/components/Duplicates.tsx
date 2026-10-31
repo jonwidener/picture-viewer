@@ -43,7 +43,8 @@ export default function Duplicates({ tags, onTagsChanged }: { tags: TagCount[]; 
       {selected.size > 0 ? (
         <BulkBar count={selected.size} ids={[...selected]} tags={tags}
           onAdd={(t) => bulk({ add_tags: [t] })} onRemove={(t) => bulk({ remove_tags: [t] })}
-          onFavorite={(on) => bulk({ favorite: on })} onRotate={(d) => bulk({ rotate: d })} onClear={() => setSelected(new Set())} />
+          onFavorite={(on) => bulk({ favorite: on })} onRotate={(d) => bulk({ rotate: d })}
+          onDelete={() => { setSelected(new Set()); void bulk({ deleted: true }) }} onClear={() => setSelected(new Set())} />
       ) : (
         <div className="flex items-center gap-3 border-b border-neutral-800 px-3 py-2">
           <span className="text-sm text-neutral-400">
@@ -68,6 +69,8 @@ export default function Duplicates({ tags, onTagsChanged }: { tags: TagCount[]; 
                     {e.kind === 'video' && <span className="absolute right-2 top-2 rounded bg-black/60 px-1.5 text-xs">▶ {fmtDuration(e.duration)}</span>}
                   </div>
                   <p className="mt-2 break-all font-mono text-xs text-neutral-300">{e.path}</p>
+                  <button className="mt-1 text-xs text-red-300 hover:underline" title="Hide from the app (files on disk are not touched)"
+                    onClick={async () => { await api.bulk({ ids: [e.item_id], deleted: true }); await reload(Math.max(groups.length, PAGE)); onTagsChanged() }}>🗑 Delete</button>
                   <p className="mt-1 text-xs text-neutral-500">{fmtDate(e.taken_at)}{e.width ? ` · ${e.width}×${e.height}` : ''}</p>
                   {e.name && <p className="mt-1 text-sm">{e.name}</p>}
                   {e.tags.length > 0 && <p className="mt-1 text-xs text-sky-300">{e.tags.join(', ')}</p>}
