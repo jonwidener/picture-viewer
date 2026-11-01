@@ -58,7 +58,13 @@ def _run(db_path):
                         continue
                     ext = os.path.splitext(n)[1].lower()
                     if media.kind_for(ext):
-                        entries.append((r["id"], r["path"], os.path.join(dirpath, n)))
+                        full = os.path.join(dirpath, n)
+                        try:
+                            if os.path.getsize(full) == 0:
+                                continue  # empty files are skipped (previously indexed ones end up flagged missing)
+                        except OSError:
+                            continue
+                        entries.append((r["id"], r["path"], full))
         _set(phase="indexing", total=len(entries))
 
         seen = set()
