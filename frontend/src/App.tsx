@@ -11,7 +11,7 @@ import Viewer from './components/Viewer'
 import { useItems } from './useItems'
 
 export default function App() {
-  const [page, setPage] = useState<'library' | 'duplicates' | 'slideshows' | 'deleted' | 'settings'>('library')
+  const [page, setPage] = useState<'library' | 'duplicates' | 'slideshows' | 'missing' | 'deleted' | 'settings'>('library')
   const [filters, setFilters] = useState<Filters>(defaultFilters)
   const [debouncedQ, setDebouncedQ] = useState('')
   const [tags, setTags] = useState<TagCount[]>([])
@@ -25,7 +25,7 @@ export default function App() {
     return () => clearTimeout(t)
   }, [filters.q])
 
-  const query = useMemo(() => filterQuery({ ...filters, q: debouncedQ }) + (page === 'deleted' ? '&deleted=1' : ''), [filters, debouncedQ, page])
+  const query = useMemo(() => filterQuery({ ...filters, q: debouncedQ }) + (page === 'deleted' ? '&deleted=1' : page === 'missing' ? '&missing=1' : ''), [filters, debouncedQ, page])
   const items = useItems(query)
   const { reload } = items
   const empty = useMemo(() => new Set<number>(), [])
@@ -73,6 +73,7 @@ export default function App() {
         {navBtn('library', 'Library')}
         {navBtn('duplicates', 'Duplicates')}
         {navBtn('slideshows', 'Slideshows')}
+        {navBtn('missing', 'Missing')}
         {navBtn('deleted', 'Deleted')}
         {navBtn('settings', 'Settings')}
       </header>
@@ -82,7 +83,7 @@ export default function App() {
       {page === 'duplicates' && <div className="min-h-0 flex-1"><Duplicates tags={tags} onTagsChanged={loadTags} /></div>}
       {page === 'slideshows' && <div className="min-h-0 flex-1"><Slideshows /></div>}
 
-      {(page === 'library' || page === 'deleted') && (
+      {(page === 'library' || page === 'missing' || page === 'deleted') && (
         <>
           {selected.size > 0 ? (
             <BulkBar count={selected.size} ids={[...selected]} tags={tags}

@@ -22,13 +22,13 @@ export interface DupGroup { hash: string; size: number; entries: DupEntry[] }
 export interface Slideshow { id: number; name: string; count: number }
 export interface Filters {
   q: string; sort: 'taken' | 'added' | 'name'; dir: 'asc' | 'desc'
-  type: '' | 'image' | 'video' | 'live'; favorite: boolean; untagged: boolean; unnamed: boolean; missing: boolean
+  type: '' | 'image' | 'video' | 'live'; favorite: boolean; untagged: boolean; unnamed: boolean
   tags: number[]; tagMode: 'all' | 'any'; from: string; to: string
 }
 
 export const defaultFilters: Filters = {
   q: '', sort: 'taken', dir: 'desc', type: '', favorite: false, untagged: false, unnamed: false,
-  missing: false, tags: [], tagMode: 'all', from: '', to: '',
+  tags: [], tagMode: 'all', from: '', to: '',
 }
 
 const dayStart = (d: string) => Math.floor(Date.parse(d + 'T00:00:00Z') / 1000)
@@ -42,7 +42,6 @@ export function filterQuery(f: Filters): string {
   if (f.favorite) p.set('favorite', '1')
   if (f.untagged) p.set('untagged', '1')
   if (f.unnamed) p.set('unnamed', '1')
-  if (f.missing) p.set('missing', '1')
   if (f.tags.length) { p.set('tags', f.tags.join(',')); p.set('tag_mode', f.tagMode) }
   if (f.from) p.set('from', String(dayStart(f.from)))
   if (f.to) p.set('to', String(dayStart(f.to) + 86400))

@@ -49,7 +49,6 @@ export default function FilterBar({ filters, setFilters, tags, total, onPlay }: 
 
       <button className={chip(filters.untagged)} onClick={() => set({ untagged: !filters.untagged })}>Untagged</button>
       <button className={chip(filters.unnamed)} onClick={() => set({ unnamed: !filters.unnamed })}>Unnamed</button>
-      <button className={chip(filters.missing)} onClick={() => set({ missing: !filters.missing })}>Missing</button>
 
       <label className="flex items-center gap-1 text-sm text-neutral-400">From
         <input type="date" className={input} value={filters.from} onChange={(e) => set({ from: e.target.value })} /></label>
